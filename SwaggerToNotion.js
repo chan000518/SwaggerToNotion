@@ -10,13 +10,14 @@ require("dotenv").config();
 // const parentPageId = ""; // Notion 페이지 ID 입력
 
 // // 스웨거 url : /로 끝나야 합니다.
-// const swaggerUrl = "http://localhost:3000/api-docs/";
+// const severUrl = "http://localhost:3000/";
+
 
 // 환경 변수 읽기
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const parentPageId = process.env.NOTION_PARENT_PAGE_ID;
 // /로 끝나야 실행
-const swaggerUrl = process.env.SWAGGER_URL.endsWith("/")
+const severUrl = process.env.SWAGGER_URL.endsWith("/")
     ? process.env.SWAGGER_URL
     : process.env.SWAGGER_URL + "/";
 
@@ -59,23 +60,31 @@ async function createDatabase() {
     }
 }
 
-// 스웨서에서 내용을 fetch
-async function fetchSwaggerDocFromJs(swaggerUrl) {
+// 스웨거에서 내용을 fetch
+async function fetchSwaggerDocFromJs(severUrl) {
     try {
-        const response = await fetch(swaggerUrl + "swagger-ui-init.js");
+        // 노드 스웨거 주소
+        let response = await fetch(severUrl + "api-docs/swagger-ui-init.js");
+
+        if (response.ok) {
+            const scriptContent = await response.text();
+
+            // options.swaggerDoc 파싱
+            const swaggerDocMatch = scriptContent.match(/var options = ({[\s\S]*?});/);
+            if (!swaggerDocMatch) {
+                throw new Error("SwaggerDoc not found in the script.");
+            }
+
+            const options = JSON.parse(swaggerDocMatch[1]);
+            return options.swaggerDoc;
+        }
+
+        // 스프링의 경우 v3 API
+        response = await fetch(severUrl + "v3/api-docs");
         if (!response.ok) {
             throw new Error(`Failed to fetch Swagger UI: ${response.statusText}`);
         }
-        const scriptContent = await response.text(); // 스크립트를 텍스트로 읽음
-
-        // options.swaggerDoc 파싱
-        const swaggerDocMatch = scriptContent.match(/var options = ({[\s\S]*?});/);
-        if (!swaggerDocMatch) {
-            throw new Error("SwaggerDoc not found in the script.");
-        }
-
-        const options = eval(`(${swaggerDocMatch[1]})`); // 문자열을 객체로 변환
-        return options.swaggerDoc;
+        return await response.json(); // 스크립트를 JSON으로 읽음
     } catch (error) {
         console.error("Error fetching or parsing SwaggerDoc:", error.message);
         throw error;
@@ -225,7 +234,7 @@ async function addApiToNotion(databaseId, swaggerData) {
         const databaseId = await createDatabase();
 
         // Step 2: Swagger 명세 가져오기
-        const swaggerDoc = await fetchSwaggerDocFromJs(swaggerUrl);
+        const swaggerDoc = await fetchSwaggerDocFromJs(severUrl);
 
         // Step 3: 데이터베이스에 API 명세 추가
         await addApiToNotion(databaseId, swaggerDoc);
