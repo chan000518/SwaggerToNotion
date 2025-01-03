@@ -1,6 +1,8 @@
 const fetch = require("node-fetch");
 const { Client } = require("@notionhq/client");
 
+require("dotenv").config();
+
 // // 노션 개발자 키
 // const notion = new Client({ auth: "" });
 
